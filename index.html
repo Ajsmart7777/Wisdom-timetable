@@ -1,0 +1,239 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Wisdom Intl College</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+    }
+    nav {
+      background: #003366;
+      color: white;
+      display: flex;
+      justify-content: space-around;
+      padding: 12px;
+      font-weight: bold;
+    }
+    nav div {
+      cursor: pointer;
+    }
+    section {
+      display: none;
+      padding: 20px;
+    }
+    section.active {
+      display: block;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #003366;
+      color: white;
+    }
+    img {
+      max-width: 250px;
+      border-radius: 10px;
+      border: 2px solid #003366;
+    }
+    #popup {
+      display: none;
+      position: fixed;
+      top: 20%;
+      left: 10%;
+      width: 80%;
+      background: white;
+      border: 2px solid #003366;
+      border-radius: 10px;
+      padding: 20px;
+      z-index: 100;
+    }
+    #popup select, #popup input {
+      display: block;
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 8px;
+    }
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 50;
+    }
+    #alertBox {
+      display: none;
+      position: fixed;
+      top: 30%;
+      left: 20%;
+      width: 60%;
+      padding: 20px;
+      background: #fff;
+      border: 2px solid red;
+      border-radius: 10px;
+      z-index: 200;
+    }
+  </style>
+
+  <link rel="manifest" href="manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(reg => console.log("Service Worker registered"))
+          .catch(err => console.error("SW registration failed", err));
+      });
+    }
+  </script>
+</head>
+<body>
+
+<nav>
+  <div onclick="showSection('home')">Home</div>
+  <div onclick="showSection('table')">Table</div>
+  <div onclick="showSection('help')">Help</div>
+</nav>
+
+<section id="home" class="active">
+  <h1>Wisdom International College</h1>
+  <img src="school-badge.jpg" alt="School Badge" />
+</section>
+
+<section id="table">
+  <h2>Timetable Editor</h2>
+  <div id="staff-info"></div>
+  <button onclick="promptStaff()">Edit Timetable</button>
+  <div id="timetable-container"></div>
+</section>
+
+<section id="help">
+  <h2>Help & Contact</h2>
+  <p>Contact Auwal Rabiu Jamo: 09078861166</p>
+</section>
+
+<div id="overlay"></div>
+<div id="popup">
+  <h3>Edit Period</h3>
+  <select id="subjectSelect">
+    <option>Math</option><option>English</option><option>Physics</option>
+    <option>Chemistry</option><option>Biology</option><option>History</option>
+    <option>Geography</option><option>ICT</option><option>Civic</option>
+    <option>Economics</option><option>Islamic Studies</option>
+  </select>
+  <input type="time" id="timeInput" />
+  <select id="classSelect">
+    <option>JSS1</option><option>JSS2</option><option>JSS3</option>
+    <option>SS1</option><option>SS2</option><option>SS3</option>
+  </select>
+  <button onclick="savePeriod()">Save</button>
+</div>
+
+<div id="alertBox">
+  <h3>Class Reminder</h3>
+  <p id="alertText"></p>
+  <button onclick="stopAlert()">Acknowledge</button>
+</div>
+
+<audio id="bell" src="school-bell.wav"></audio>
+
+<script>
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  let currentCell = null;
+  let staffName = localStorage.getItem("staffName") || "";
+
+  function showSection(id) {
+    document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+    if (id === "table") renderTable();
+  }
+
+  function promptStaff() {
+    const name = prompt("Enter staff name:");
+    if (name) {
+      staffName = name;
+      localStorage.setItem("staffName", name);
+      renderTable();
+    }
+  }
+
+  function renderTable() {
+    document.getElementById("staff-info").innerText = staffName ? `Editing: ${staffName}` : "View Only";
+    const data = JSON.parse(localStorage.getItem("timetableData") || "{}");
+    let html = "<table><tr><th>Day / Period</th>";
+    for (let i = 1; i <= 6; i++) html += `<th>Period ${i}</th>`;
+    html += "</tr>";
+    for (let day of days) {
+      html += `<tr><th>${day}</th>`;
+      for (let i = 0; i < 6; i++) {
+        const key = `${day}_${i}`;
+        const val = data[key] || {};
+        const label = val.subject ? `${val.subject}<br>${val.time}<br>${val.class}` : "";
+        html += `<td onclick="editPeriod('${key}')">${label}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</table>";
+    document.getElementById("timetable-container").innerHTML = html;
+  }
+
+  function editPeriod(key) {
+    if (!staffName) return;
+    currentCell = key;
+    document.getElementById("overlay").style.display = "block";
+    document.getElementById("popup").style.display = "block";
+  }
+
+  function savePeriod() {
+    const subject = document.getElementById("subjectSelect").value;
+    const time = document.getElementById("timeInput").value;
+    const cls = document.getElementById("classSelect").value;
+    let data = JSON.parse(localStorage.getItem("timetableData") || "{}");
+    data[currentCell] = { subject, time, class: cls };
+    localStorage.setItem("timetableData", JSON.stringify(data));
+    document.getElementById("popup").style.display = "none";
+    document.getElementById("overlay").style.display = "none";
+    renderTable();
+  }
+
+  function stopAlert() {
+    document.getElementById("alertBox").style.display = "none";
+    document.getElementById("bell").pause();
+    document.getElementById("bell").currentTime = 0;
+  }
+
+  function checkAlerts() {
+    const now = new Date();
+    const currentTime = now.toTimeString().slice(0,5);
+    const currentDay = days[now.getDay() - 1];
+    const data = JSON.parse(localStorage.getItem("timetableData") || "{}");
+    for (let i = 0; i < 6; i++) {
+      const key = `${currentDay}_${i}`;
+      const entry = data[key];
+      if (entry && entry.time === currentTime && !window.alerted) {
+        document.getElementById("alertText").innerHTML = `Subject: ${entry.subject}<br>Class: ${entry.class}`;
+        document.getElementById("alertBox").style.display = "block";
+        document.getElementById("bell").play();
+        window.alerted = true;
+        setTimeout(() => window.alerted = false, 60000);
+      }
+    }
+  }
+
+  setInterval(checkAlerts, 30000);  // check every 30 seconds
+  renderTable();
+</script>
+</body>
+</html>
